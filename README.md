@@ -92,8 +92,8 @@ Credenciais (Copia e Cola):
 
    
     {
-        "username": "service-integration-provider",
-        "password": "7e5a8f42-c1b3-4d9a-8e2f-1a5c6b7d8e9f"
+        "clientId": "service-integration-provider",
+        "clientSecret": "7e5a8f42-c1b3-4d9a-8e2f-1a5c6b7d8e9f"
     }
 Resultado: Copie o valor do token retornado no JSON.
 
