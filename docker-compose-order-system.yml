@@ -1,14 +1,54 @@
+version: '3.8'
+
 services:
+  # --- INFRAESTRUTURA ---
+  mongo:
+    image: mongo:latest
+    container_name: order-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=iam_db  # Garante a criação da base do IAM
+    volumes:
+      - order_mongo_data:/data/db
+    networks:
+      - order-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: order-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - order-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # --- MICROSSERVIÇOS ---
+
   iam-service:
     build:
-      context: ../iam-service
-      dockerfile: Dockerfile
+      context: ..         # Contexto na raiz para enxergar shared-contracts e iam-service
+      dockerfile: ./iam-service/Dockerfile
     container_name: iam-service
     ports:
       - "8080:8080"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/iam_db
       - JWT_SECRET=M2I3YzA5OGU1YmFhN2U3Zjk0ZWY0ZGIyYmU5ZDBjZjkxZWRhYmFmNjA4MGY1ZDIzM2M4ZGM0ZTI5N2I0YmU3YQ==
+    depends_on:
+      mongo:
+        condition: service_healthy
     networks:
       - order-network
 
@@ -24,8 +64,10 @@ services:
       - SPRING_RABBITMQ_HOST=rabbitmq
       - IAM_SERVICE_URL=http://iam-service:8080
     depends_on:
-      - rabbitmq
-      - iam-service
+      rabbitmq:
+        condition: service_healthy
+      iam-service:
+        condition: service_started
     networks:
       - order-network
 
@@ -38,29 +80,26 @@ services:
       - "8082:8082"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_DATA_MONGODB_HOST=mongo
+      - SPRING_DATA_MONGODB_URI=mongodb://mongo:27017/orders_db
       - SPRING_RABBITMQ_HOST=rabbitmq
       - IAM_SERVICE_URL=http://iam-service:8080
     depends_on:
-      - mongo
-      - rabbitmq
-      - iam-service
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      iam-service:
+        condition: service_started
     networks:
       - order-network
 
-  mongo:
-    image: mongo:latest
-    container_name: order-mongo
-    ports:
-      - "27017:27017"
-    networks:
-      - order-network
-
+  # --- UTILITÁRIOS ---
   mongo-express:
     image: mongo-express:latest
     container_name: order-mongo-gui
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     ports:
       - "8085:8081"
     environment:
@@ -71,15 +110,9 @@ services:
     networks:
       - order-network
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: order-rabbit
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    networks:
-      - order-network
-
 networks:
   order-network:
     driver: bridge
+
+volumes:
+  order_mongo_data:
